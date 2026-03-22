@@ -3,265 +3,208 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MILCHSTRASSE // DATEN-TERMINAL</title>
+<title>GALAXY SYSTEM</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
 
+<!-- THREE JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&family=JetBrains+Mono:wght@100;400&display=swap');
-
-body {
-    margin: 0;
-    background: black;
-    color: #e2e8f0;
-    font-family: 'Space Grotesk', sans-serif;
-    overflow-x: hidden;
+body { margin:0; overflow:hidden; background:black; color:white; font-family:sans-serif;}
+#ui {
+    position:absolute;
+    top:20px;
+    left:20px;
+    z-index:10;
 }
-
-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 0;
+.panel {
+    background:rgba(0,0,0,0.6);
+    padding:15px;
+    border:1px solid rgba(0,150,255,0.3);
+    backdrop-filter: blur(10px);
+    max-width:300px;
 }
-
-.mono { font-family: 'JetBrains Mono', monospace; }
-
-.glass-panel {
-    background: rgba(255,255,255,0.03);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(0,191,255,0.1);
-}
-
-.fade-in {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: all 1s ease;
-}
-.fade-in.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-/* Boot Screen */
-#boot {
-    position: fixed;
-    inset: 0;
-    background: black;
-    z-index: 999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: monospace;
+button {
+    margin-top:5px;
+    padding:5px 10px;
+    background:#0ea5e9;
 }
 </style>
 </head>
 
 <body>
 
-<!-- Boot Screen -->
-<div id="boot">
-    <div id="bootText"></div>
+<div id="ui">
+    <div class="panel">
+        <h2>🛰️ Galaxy Control</h2>
+        <p id="userPos">Lade Standort...</p>
+        <p>Klicke einen Planeten 👇</p>
+    </div>
+
+    <div id="planetInfo" class="panel mt-4 hidden"></div>
 </div>
-
-<canvas id="stars"></canvas>
-
-<nav class="relative z-10 p-6 flex justify-between border-b border-white/10">
-    <div class="flex items-center gap-4">
-        <i data-lucide="orbit" class="text-blue-400"></i>
-        <span class="font-bold tracking-widest">Milky Way // Atlas</span>
-    </div>
-
-    <div class="flex gap-4">
-        <button onclick="toggleSound()" class="mono text-xs">🔊 SOUND</button>
-        <button onclick="fakeScan()" class="mono text-xs">SCAN</button>
-    </div>
-</nav>
-
-<main class="relative z-10 max-w-6xl mx-auto p-6">
-
-<div class="glass-panel p-10 rounded-2xl mb-10 fade-in">
-    <h1 id="title" class="text-5xl font-bold mb-4"></h1>
-    <p id="desc" class="text-blue-300"></p>
-
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-10">
-        <div>
-            <div class="mono text-xs">ALTER</div>
-            <div id="age" class="text-xl font-bold"></div>
-        </div>
-        <div>
-            <div class="mono text-xs">STERNE</div>
-            <div id="starsCount" class="text-xl font-bold"></div>
-        </div>
-        <div>
-            <div class="mono text-xs">MASSE</div>
-            <div id="mass" class="text-xl font-bold"></div>
-        </div>
-        <div>
-            <div class="mono text-xs">STATUS</div>
-            <div id="status" class="text-green-400 font-bold"></div>
-        </div>
-    </div>
-</div>
-
-</main>
-
-<audio id="bgSound" loop>
-<source src="https://cdn.pixabay.com/audio/2022/03/15/audio_115b9b7c3d.mp3">
-</audio>
 
 <script>
-lucide.createIcons();
+/* =====================
+   SCENE
+===================== */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
 
-/* =======================
-   STARFIELD
-======================= */
-const canvas = document.getElementById("stars");
-const ctx = canvas.getContext("2d");
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+/* =====================
+   LIGHT
+===================== */
+const light = new THREE.PointLight(0xffffff, 2, 300);
+scene.add(light);
 
-let stars = [];
+/* =====================
+   STARS
+===================== */
+const starGeo = new THREE.BufferGeometry();
+const starVertices = [];
 
-for (let i = 0; i < 300; i++) {
-    stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        z: Math.random() * canvas.width
-    });
+for(let i=0;i<10000;i++){
+    starVertices.push(
+        Math.random()*2000-1000,
+        Math.random()*2000-1000,
+        Math.random()*2000-1000
+    );
 }
 
-function drawStars() {
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVertices,3));
+const starMat = new THREE.PointsMaterial({color:0xffffff});
+const stars = new THREE.Points(starGeo, starMat);
+scene.add(stars);
 
-    ctx.fillStyle = "white";
-
-    stars.forEach(s => {
-        s.z -= 1;
-        if (s.z <= 0) s.z = canvas.width;
-
-        let x = (s.x - canvas.width/2) * (canvas.width/s.z) + canvas.width/2;
-        let y = (s.y - canvas.height/2) * (canvas.height/s.z) + canvas.height/2;
-
-        ctx.fillRect(x, y, 1.5, 1.5);
-    });
-
-    requestAnimationFrame(drawStars);
-}
-drawStars();
-
-/* =======================
-   TYPING EFFECT
-======================= */
-function typeText(el, text, speed=30) {
-    let i = 0;
-    function typing() {
-        if (i < text.length) {
-            el.innerHTML += text.charAt(i);
-            i++;
-            setTimeout(typing, speed);
-        }
-    }
-    typing();
-}
-
-typeText(document.getElementById("title"), "UNSERE GALAXIE");
-typeText(document.getElementById("desc"),
-"Ein gigantisches System aus Milliarden Sternen im Universum...", 20);
-
-/* =======================
-   LIVE DATA
-======================= */
-let starsVal = 200;
-
-setInterval(() => {
-    starsVal += Math.random();
-    document.getElementById("starsCount").innerText =
-        starsVal.toFixed(2) + " Mrd.";
-
-    document.getElementById("age").innerText =
-        (13.6 + Math.random()*0.01).toFixed(2) + " Mrd. J";
-
-    document.getElementById("mass").innerText =
-        (1.5 + Math.random()*0.01).toFixed(2) + " T";
-
-}, 2000);
-
-document.getElementById("status").innerText = "STABIL";
-
-/* =======================
-   SOUND
-======================= */
-let soundOn = false;
-function toggleSound() {
-    const audio = document.getElementById("bgSound");
-    soundOn = !soundOn;
-    soundOn ? audio.play() : audio.pause();
-}
-
-/* =======================
-   FAKE SCAN
-======================= */
-function fakeScan() {
-    document.getElementById("status").innerText = "SCANNING...";
-    setTimeout(()=>{
-        document.getElementById("status").innerText = "STABIL";
-    },2000);
-}
-
-/* =======================
-   BOOT SCREEN
-======================= */
-const bootText = document.getElementById("bootText");
-const bootLines = [
-"INITIALIZING SYSTEM...",
-"LOADING GALAXY DATA...",
-"CONNECTING TO NASA CORE...",
-"ACCESS GRANTED"
+/* =====================
+   PLANETS DATA (ECHT)
+===================== */
+const planetsData = [
+{ name:"Merkur", size:1, dist:10, color:0xaaaaaa, info:"Kleinster Planet. Sehr heiß & kalt." },
+{ name:"Venus", size:1.5, dist:15, color:0xffcc66, info:"Heißester Planet (~470°C)." },
+{ name:"Erde", size:1.6, dist:20, color:0x3399ff, info:"Unser Zuhause 🌍" },
+{ name:"Mars", size:1.2, dist:25, color:0xff3300, info:"Roter Planet. Früher evtl. Wasser." },
+{ name:"Jupiter", size:4, dist:35, color:0xff9966, info:"Größter Planet." },
+{ name:"Saturn", size:3.5, dist:45, color:0xffcc99, info:"Hat Ringe." },
+{ name:"Uranus", size:2.5, dist:55, color:0x66ffff, info:"Rotiert seitlich." },
+{ name:"Neptun", size:2.5, dist:65, color:0x3366ff, info:"Stärkste Winde." }
 ];
 
-let i = 0;
+let planets = [];
 
-function boot() {
-    if (i < bootLines.length) {
-        bootText.innerHTML += bootLines[i] + "<br>";
-        i++;
-        setTimeout(boot, 600);
-    } else {
-        setTimeout(()=>{
-            document.getElementById("boot").style.display = "none";
-        },1000);
+/* =====================
+   CREATE PLANETS
+===================== */
+planetsData.forEach(p => {
+    const geo = new THREE.SphereGeometry(p.size, 32, 32);
+    const mat = new THREE.MeshStandardMaterial({color:p.color});
+    const mesh = new THREE.Mesh(geo, mat);
+
+    mesh.position.x = p.dist;
+    mesh.userData = p;
+
+    scene.add(mesh);
+    planets.push(mesh);
+});
+
+/* =====================
+   CAMERA
+===================== */
+camera.position.z = 80;
+
+/* =====================
+   CLICK SYSTEM
+===================== */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+window.addEventListener("click", (event)=>{
+    mouse.x = (event.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(planets);
+
+    if(intersects.length > 0){
+        const planet = intersects[0].object;
+        showPlanetInfo(planet.userData);
+
+        // Kamera Flug 🚀
+        const target = planet.position.clone();
+        animateCamera(target);
     }
+});
+
+/* =====================
+   CAMERA ANIMATION
+===================== */
+function animateCamera(target){
+    let step = 0;
+
+    const interval = setInterval(()=>{
+        step += 0.02;
+        camera.position.lerp(new THREE.Vector3(target.x, target.y, target.z+5), step);
+
+        if(step >= 1) clearInterval(interval);
+    },16);
 }
-boot();
 
-/* =======================
-   SCROLL ANIMATION
-======================= */
-const observer = new IntersectionObserver(entries=>{
-    entries.forEach(e=>{
-        if(e.isIntersecting){
-            e.target.classList.add("visible");
-        }
+/* =====================
+   PLANET INFO PANEL
+===================== */
+function showPlanetInfo(data){
+    const el = document.getElementById("planetInfo");
+    el.classList.remove("hidden");
+
+    el.innerHTML = `
+    <h3>${data.name}</h3>
+    <p>${data.info}</p>
+    <button onclick="resetCam()">Zurück</button>
+    `;
+}
+
+/* =====================
+   RESET CAMERA
+===================== */
+function resetCam(){
+    camera.position.set(0,0,80);
+}
+
+/* =====================
+   USER LOCATION 🌍
+===================== */
+navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById("userPos").innerText =
+    "Dein Standort: " + pos.coords.latitude.toFixed(2) + " / " + pos.coords.longitude.toFixed(2);
+});
+
+/* =====================
+   ANIMATION LOOP
+===================== */
+function animate(){
+    requestAnimationFrame(animate);
+
+    planets.forEach(p=>{
+        p.rotation.y += 0.01;
     });
-});
-document.querySelectorAll(".fade-in").forEach(el=>{
-    observer.observe(el);
-});
 
-/* =======================
-   EASTER EGG 😏
-======================= */
-let keys = [];
-window.addEventListener("keydown", e=>{
-    keys.push(e.key);
-    if(keys.join("").includes("space")){
-        alert("🚀 SECRET UNLOCKED");
-        keys = [];
-    }
+    renderer.render(scene, camera);
+}
+animate();
+
+/* =====================
+   RESIZE
+===================== */
+window.addEventListener("resize", ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
 });
 </script>
 
