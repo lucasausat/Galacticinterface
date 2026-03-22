@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>GALAXY ENGINE</title>
+<title>SPACE GAME</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -20,7 +20,6 @@ body { margin:0; overflow:hidden; background:black; }
     background:rgba(0,0,0,0.6);
     padding:15px;
     border:1px solid rgba(0,150,255,0.3);
-    margin-bottom:10px;
 }
 </style>
 </head>
@@ -29,32 +28,29 @@ body { margin:0; overflow:hidden; background:black; }
 
 <div id="ui">
     <div class="panel">
-        <b>🚀 SPACE CONTROL</b><br>
-        WASD = bewegen<br>
-        Maus = schauen<br>
-        Scroll = Zoom<br>
-        Klick = Planet auswählen
+        🚀 WASD = fliegen<br>
+        SHIFT = Boost<br>
+        E = Landen<br>
+        Q = zurück ins All<br>
     </div>
-
-    <div id="info" class="panel">Bereit...</div>
+    <div id="info" class="panel mt-2">Space ready...</div>
 </div>
 
 <script>
-
-/* =====================
-   BASIC SETUP
-===================== */
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
-camera.position.z = 50;
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 10000);
+camera.position.z = 100;
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const light = new THREE.PointLight(0xffffff, 2);
-scene.add(light);
+/* =====================
+   LIGHT (SUN)
+===================== */
+const sunLight = new THREE.PointLight(0xffffff, 3, 0);
+scene.add(sunLight);
 
 /* =====================
    STARFIELD
@@ -62,158 +58,135 @@ scene.add(light);
 const starGeo = new THREE.BufferGeometry();
 let starVertices = [];
 
-for(let i=0;i<15000;i++){
+for(let i=0;i<20000;i++){
     starVertices.push(
-        Math.random()*4000-2000,
-        Math.random()*4000-2000,
-        Math.random()*4000-2000
+        Math.random()*8000-4000,
+        Math.random()*8000-4000,
+        Math.random()*8000-4000
     );
 }
 
 starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVertices,3));
-const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({color:0xffffff}));
-scene.add(stars);
+scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0xffffff})));
 
 /* =====================
-   GALAXY SPIRALS
-===================== */
-function createGalaxy(offsetX){
-    const geo = new THREE.BufferGeometry();
-    let verts = [];
-
-    for(let i=0;i<4000;i++){
-        let angle = i*0.1;
-        let radius = i*0.02;
-
-        let x = Math.cos(angle)*radius + offsetX;
-        let z = Math.sin(angle)*radius;
-        let y = (Math.random()-0.5)*2;
-
-        verts.push(x,y,z);
-    }
-
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
-    scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:0.1})));
-}
-
-// mehrere Galaxien
-createGalaxy(0);
-createGalaxy(300);
-createGalaxy(-300);
-
-/* =====================
-   TEXTURES
-===================== */
-const loader = new THREE.TextureLoader();
-
-const earthTex = loader.load("https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg");
-
-/* =====================
-   PLANETS
+   PLANETS (ALLE)
 ===================== */
 const planets = [];
 
-function createPlanet(name, size, dist, texture){
+function planet(name,size,dist,color){
     const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(size, 64,64),
-        new THREE.MeshStandardMaterial({map:texture})
+        new THREE.SphereGeometry(size,64,64),
+        new THREE.MeshStandardMaterial({color:color})
     );
     mesh.position.x = dist;
-    mesh.userData.name = name;
+    mesh.userData = {name:name,size:size};
     scene.add(mesh);
     planets.push(mesh);
 }
 
-createPlanet("Erde", 3, 20, earthTex);
+// Sonne
+planet("Sonne",10,0,0xffcc00);
+
+// Planeten
+planet("Merkur",1,20,0xaaaaaa);
+planet("Venus",2,30,0xffcc66);
+planet("Erde",2.2,40,0x3399ff);
+planet("Mars",1.5,50,0xff3300);
+planet("Jupiter",5,70,0xff9966);
+planet("Saturn",4,90,0xffcc99);
+planet("Uranus",3,110,0x66ffff);
+planet("Neptun",3,130,0x3366ff);
 
 /* =====================
-   ISS (LIVE API)
+   ISS
 ===================== */
 const iss = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5,0.5,1),
+    new THREE.BoxGeometry(1,0.3,0.3),
     new THREE.MeshBasicMaterial({color:0xffffff})
 );
 scene.add(iss);
 
-async function updateISS(){
-    try{
-        const res = await fetch("https://api.wheretheiss.at/v1/satellites/25544");
-        const data = await res.json();
-
-        // Mapping Position fake auf Szene
-        iss.position.x = data.latitude;
-        iss.position.z = data.longitude;
-
-        document.getElementById("info").innerText =
-            "ISS Position: " + data.latitude.toFixed(2) + " / " + data.longitude.toFixed(2);
-
-    }catch(e){}
-}
-
-setInterval(updateISS, 5000);
+let issAngle = 0;
 
 /* =====================
-   NASA DATA
+   ROCKET (PLAYER)
 ===================== */
-async function loadNASA(){
-    const res = await fetch("https://api.le-systeme-solaire.net/rest/bodies/");
-    const data = await res.json();
-    console.log(data);
-}
-loadNASA();
+const rocket = new THREE.Mesh(
+    new THREE.ConeGeometry(1,3,16),
+    new THREE.MeshBasicMaterial({color:0xffffff})
+);
+scene.add(rocket);
 
 /* =====================
-   CONTROLS (WASD + MOUSE)
+   CONTROLS
 ===================== */
 let keys = {};
-window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+window.addEventListener("keydown", e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener("keyup", e=>keys[e.key.toLowerCase()]=false);
 
-let mouseX=0, mouseY=0;
-
-window.addEventListener("mousemove", e=>{
-    mouseX = (e.clientX/window.innerWidth -0.5)*2;
-    mouseY = (e.clientY/window.innerHeight -0.5)*2;
-});
-
-window.addEventListener("wheel", e=>{
-    camera.position.z += e.deltaY * 0.05;
-});
-
-/* =====================
-   CLICK PLANET
-===================== */
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-
-window.addEventListener("click", e=>{
-    mouse.x = (e.clientX/innerWidth)*2-1;
-    mouse.y = -(e.clientY/innerHeight)*2+1;
-
-    raycaster.setFromCamera(mouse,camera);
-    const hit = raycaster.intersectObjects(planets);
-
-    if(hit.length>0){
-        let p = hit[0].object;
-        document.getElementById("info").innerText = "Planet: " + p.userData.name;
-
-        camera.position.set(p.position.x, p.position.y, p.position.z+5);
-    }
-});
+let speed = 0.5;
+let landed = false;
+let currentPlanet = null;
 
 /* =====================
    MOVE
 ===================== */
 function move(){
-    let speed = 0.8;
 
-    if(keys["w"]) camera.position.z -= speed;
-    if(keys["s"]) camera.position.z += speed;
-    if(keys["a"]) camera.position.x -= speed;
-    if(keys["d"]) camera.position.x += speed;
+    if(landed) return;
 
-    camera.rotation.y = -mouseX * 0.5;
-    camera.rotation.x = -mouseY * 0.3;
+    let boost = keys["shift"] ? 3 : 1;
+
+    if(keys["w"]) camera.position.z -= speed*boost;
+    if(keys["s"]) camera.position.z += speed*boost;
+    if(keys["a"]) camera.position.x -= speed*boost;
+    if(keys["d"]) camera.position.x += speed*boost;
+
+    rocket.position.copy(camera.position);
+}
+
+/* =====================
+   LAND SYSTEM
+===================== */
+function checkLanding(){
+    planets.forEach(p=>{
+        const dist = camera.position.distanceTo(p.position);
+
+        if(dist < p.userData.size + 5){
+            if(keys["e"]){
+                landed = true;
+                currentPlanet = p;
+
+                camera.position.set(
+                    p.position.x,
+                    p.position.y + p.userData.size + 2,
+                    p.position.z
+                );
+
+                document.getElementById("info").innerText =
+                    "Gelandet auf " + p.userData.name;
+            }
+        }
+    });
+}
+
+/* =====================
+   SURFACE MODE
+===================== */
+function surfaceMove(){
+    let moveSpeed = 0.2;
+
+    if(keys["w"]) camera.position.z -= moveSpeed;
+    if(keys["s"]) camera.position.z += moveSpeed;
+    if(keys["a"]) camera.position.x -= moveSpeed;
+    if(keys["d"]) camera.position.x += moveSpeed;
+
+    if(keys["q"]){
+        landed = false;
+        camera.position.z += 20;
+        document.getElementById("info").innerText = "Zurück im All";
+    }
 }
 
 /* =====================
@@ -222,13 +195,20 @@ function move(){
 function animate(){
     requestAnimationFrame(animate);
 
-    move();
+    if(!landed){
+        move();
+        checkLanding();
+    } else {
+        surfaceMove();
+    }
 
-    planets.forEach(p=>{
-        p.rotation.y += 0.005;
-    });
+    planets.forEach(p=>p.rotation.y+=0.003);
 
-    renderer.render(scene, camera);
+    issAngle += 0.01;
+    iss.position.x = Math.cos(issAngle)*45;
+    iss.position.z = Math.sin(issAngle)*45;
+
+    renderer.render(scene,camera);
 }
 animate();
 
@@ -240,7 +220,6 @@ window.addEventListener("resize", ()=>{
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
 });
-
 </script>
 
 </body>
