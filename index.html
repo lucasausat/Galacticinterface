@@ -2,221 +2,241 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>SPACE GAME AAA - REAL PHYSICS</title>
+<title>SPACE EXPLORER PRO </title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-    body { margin:0; overflow:hidden; background:black; font-family: sans-serif; }
+    body { margin:0; overflow:hidden; background:black; font-family: 'Segoe UI', sans-serif; }
     #ui { position:absolute; top:20px; left:20px; color:white; z-index:10; pointer-events:none; }
-    .panel { background:rgba(0,0,0,0.7); padding:15px; border:1px solid rgba(0,150,255,0.5); border-radius: 8px; }
+    .panel { background:rgba(0,10,20,0.8); padding:15px; border:1px solid #00f2ff; border-radius: 12px; box-shadow: 0 0 15px rgba(0,242,255,0.2); }
+    #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: cyan; font-size: 24px; display: none; }
 </style>
 </head>
 <body>
 
+<div id="crosshair">+</div>
+
 <div id="ui">
     <div class="panel">
-        🚀 <b>WASD</b> = Steuern<br>
-        🚀 <b>SHIFT</b> = Boost<br>
-        🪐 <b>E</b> = Landen (nah am Planeten)<br>
-        🌌 <b>Q</b> = Starten / Zurück ins All<br>
-        🎥 <b>C</b> = Kamera (Cockpit/Follow)<br>
-        🖱️ <b>KLICK</b> = Laser
+        <h1 class="text-cyan-400 font-bold mb-2">FLUG-MODUS</h1>
+        🚀 <b>WASD / SHIFT</b>: Fliegen & Boost<br>
+        🪐 <b>E</b>: Landen (wenn nah)<br>
+        <h1 class="text-yellow-400 font-bold mt-4 mb-2">PLANETEN-MODUS</h1>
+        🏃 <b>WASD</b>: Laufen<br>
+        🌌 <b>Q</b>: Zurück zum Schiff / Starten<br>
+        🎥 <b>C</b>: Kamera-Ansicht
     </div>
-    <div id="info" class="panel mt-2 text-cyan-400 font-bold">Systeme bereit...</div>
+    <div id="info" class="panel mt-2 text-cyan-300 font-mono text-sm tracking-widest">SYSTEM INITIALIZED...</div>
 </div>
 
 <script>
 /* =====================
-   BASIC SETUP
+   CORE SETUP
 ===================== */
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 20000);
+scene.fog = new THREE.FogExp2(0x000000, 0.00002);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 50000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.ReinhardToneMapping;
 document.body.appendChild(renderer.domElement);
+
+const loader = new THREE.TextureLoader();
 
 /* =====================
    LIGHTING
 ===================== */
-const sunLight = new THREE.PointLight(0xffffff, 2, 0);
+const sunLight = new THREE.PointLight(0xffffff, 2.5, 0);
+sunLight.position.set(0,0,0);
 scene.add(sunLight);
-scene.add(new THREE.AmbientLight(0x404040, 0.5));
+scene.add(new THREE.AmbientLight(0x202020));
 
 /* =====================
-   STARFIELD
-===================== */
-const starGeo = new THREE.BufferGeometry();
-let starVertices = [];
-for(let i=0; i<15000; i++){
-    starVertices.push((Math.random()-0.5)*10000, (Math.random()-0.5)*10000, (Math.random()-0.5)*10000);
-}
-starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({color:0xffffff, size: 1.5}));
-scene.add(stars);
-
-/* =====================
-   PLANETS
-===================== */
-const loader = new THREE.TextureLoader();
-const planets = [];
-function createPlanet(name, size, dist, textureUrl){
-    const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(size, 64, 64),
-        new THREE.MeshStandardMaterial({ map: loader.load(textureUrl) })
-    );
-    mesh.position.x = dist;
-    mesh.userData = {name: name, size: size};
-    scene.add(mesh);
-    planets.push(mesh);
-    return mesh;
-}
-
-createPlanet("Sonne", 15, 0, "https://threejs.org/examples/textures/planets/sun.jpg");
-createPlanet("Erde", 4, 60, "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg");
-createPlanet("Mars", 3, 100, "https://threejs.org/examples/textures/planets/mars_1024.jpg");
-createPlanet("Jupiter", 8, 160, "https://threejs.org/examples/textures/planets/jupiter.jpg");
-
-/* =====================
-   ROCKET ASSEMBLY (The Fix)
+   THE ROCKET (Detailed Model)
 ===================== */
 const rocketGroup = new THREE.Group();
 scene.add(rocketGroup);
 
-// Der Körper der Rakete
-const rocketBody = new THREE.Mesh(
-    new THREE.ConeGeometry(0.5, 2, 16),
-    new THREE.MeshStandardMaterial({color: 0xcccccc})
-);
-rocketBody.rotation.x = Math.PI / 2; // Spitze zeigt nach vorn (Z-Achse)
-rocketGroup.add(rocketBody);
+// Rumpf
+const bodyGeo = new THREE.CylinderGeometry(0.5, 0.6, 3, 16);
+const bodyMat = new THREE.MeshStandardMaterial({color: 0xeeeeee, metalness: 0.8, roughness: 0.2});
+const body = new THREE.Mesh(bodyGeo, bodyMat);
+body.rotation.x = Math.PI / 2;
+rocketGroup.add(body);
 
-// Das Triebwerksleuchten (fest verbunden)
+// Spitze
+const noseGeo = new THREE.ConeGeometry(0.5, 1, 16);
+const nose = new THREE.Mesh(noseGeo, bodyMat);
+nose.position.z = -2;
+nose.rotation.x = -Math.PI / 2;
+rocketGroup.add(nose);
+
+// Flügel
+const wingGeo = new THREE.BoxGeometry(2, 0.1, 0.8);
+const wing = new THREE.Mesh(wingGeo, new THREE.MeshStandardMaterial({color: 0xff0000}));
+wing.position.z = 0.5;
+rocketGroup.add(wing);
+
+// Cockpit Fenster
+const glassGeo = new THREE.SphereGeometry(0.3, 8, 8, 0, Math.PI*2, 0, 0.5);
+const glass = new THREE.Mesh(glassGeo, new THREE.MeshPhongMaterial({color: 0x003366, shininess: 100}));
+glass.position.set(0, 0.35, -1.2);
+rocketGroup.add(glass);
+
+// Engine Glow
 const engineGlow = new THREE.Mesh(
     new THREE.SphereGeometry(0.4, 16, 16),
-    new THREE.MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: 0.8})
+    new THREE.MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: 0.7})
 );
-engineGlow.position.z = 1.1; // Am Heck der Rakete
+engineGlow.position.z = 1.5;
 rocketGroup.add(engineGlow);
 
 /* =====================
-   CONTROLS & PHYSICS
+   ENVIRONMENT
+===================== */
+const planets = [];
+function createPlanet(name, size, x, z, texture) {
+    const geo = new THREE.SphereGeometry(size, 64, 64);
+    const mat = new THREE.MeshStandardMaterial({ 
+        map: loader.load(texture),
+        roughness: 0.8 
+    });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.set(x, 0, z);
+    p.userData = { name, size };
+    scene.add(p);
+    planets.push(p);
+}
+
+// "Sonnensystem" Setup
+createPlanet("Sonne", 40, 0, 0, "https://threejs.org/examples/textures/planets/sun.jpg");
+createPlanet("Frost-Riese", 12, 400, 300, "https://threejs.org/examples/textures/planets/jupiter.jpg");
+createPlanet("Wüstenwelt", 8, -500, -200, "https://threejs.org/examples/textures/planets/mars_1024.jpg");
+createPlanet("Terra", 10, 800, -600, "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg");
+
+/* =====================
+   GAME STATE & LOGIC
 ===================== */
 let keys = {};
+let velocity = new THREE.Vector3();
+let landed = false;
+let cockpit = false;
+let playerHeight = 1.8;
+let walkSpeed = 0.2;
+
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-let velocity = new THREE.Vector3();
-let rotationSpeed = 0.04;
-let thrust = 0.015;
-let landed = false;
-let cockpit = false;
-let currentPlanet = null;
-
-function moveRocket() {
+function updateSpacePhysics() {
     if (landed) return;
 
-    let currentThrust = thrust;
-    if (keys["shift"]) currentThrust *= 3; // Boost
-
-    // Rotation (Steuerung)
-    if (keys["a"]) {
-        rocketGroup.rotateY(rotationSpeed);
-        rocketBody.rotation.z = THREE.MathUtils.lerp(rocketBody.rotation.z, 0.5, 0.1); // Neigen
-    } else if (keys["d"]) {
-        rocketGroup.rotateY(-rotationSpeed);
-        rocketBody.rotation.z = THREE.MathUtils.lerp(rocketBody.rotation.z, -0.5, 0.1); // Neigen
-    } else {
-        rocketBody.rotation.z = THREE.MathUtils.lerp(rocketBody.rotation.z, 0, 0.1); // Aufrichten
-    }
+    let acc = 0.02;
+    if (keys["shift"]) acc = 0.08;
 
     if (keys["w"]) {
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(rocketGroup.quaternion);
-        velocity.add(dir.multiplyScalar(currentThrust));
-        engineGlow.scale.setScalar(1.5 + Math.random() * 0.5); // Flackern beim Gasgeben
+        velocity.add(dir.multiplyScalar(acc));
+        engineGlow.scale.setScalar(2 + Math.random());
     } else {
-        engineGlow.scale.setScalar(0.8);
+        engineGlow.scale.setScalar(1);
     }
     
     if (keys["s"]) {
         const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(rocketGroup.quaternion);
-        velocity.add(dir.multiplyScalar(currentThrust));
+        velocity.add(dir.multiplyScalar(acc * 0.5));
     }
+
+    if (keys["a"]) rocketGroup.rotateY(0.03);
+    if (keys["d"]) rocketGroup.rotateY(-0.03);
 
     rocketGroup.position.add(velocity);
-    velocity.multiplyScalar(0.98); // Reibung im All für bessere Kontrolle
+    velocity.multiplyScalar(0.99); // Drag
 }
 
-/* =====================
-   CAMERA LOGIC
-===================== */
-function updateCamera() {
-    if (cockpit) {
-        camera.position.copy(rocketGroup.position);
-        camera.quaternion.copy(rocketGroup.quaternion);
-        return;
-    }
+function updateWalking() {
+    if (!landed) return;
 
-    const offset = new THREE.Vector3(0, 2, 8).applyQuaternion(rocketGroup.quaternion);
-    const targetPos = rocketGroup.position.clone().add(offset);
-    camera.position.lerp(targetPos, 0.1);
-    camera.lookAt(rocketGroup.position);
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0;
+    dir.normalize();
+
+    const side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+
+    if (keys["w"]) camera.position.add(dir.multiplyScalar(walkSpeed));
+    if (keys["s"]) camera.position.sub(dir.multiplyScalar(walkSpeed));
+    if (keys["a"]) camera.position.add(side.multiplyScalar(walkSpeed));
+    if (keys["d"]) camera.position.sub(side.multiplyScalar(walkSpeed));
+
+    // Blicksteuerung per Tasten (da wir kein PointerLock haben)
+    if (keys["arrowleft"]) camera.rotation.y += 0.03;
+    if (keys["arrowright"]) camera.rotation.y -= 0.03;
 }
 
-/* =====================
-   LANDING SYSTEM
-===================== */
 window.addEventListener("keydown", e => {
-    if (e.key.toLowerCase() === "e" && !landed) {
+    // Landen
+    if (e.key === "e" && !landed) {
         planets.forEach(p => {
-            if (rocketGroup.position.distanceTo(p.position) < p.userData.size + 5) {
+            let d = rocketGroup.position.distanceTo(p.position);
+            if (d < p.userData.size + 15) {
                 landed = true;
-                currentPlanet = p;
-                velocity.set(0,0,0);
-                document.getElementById("info").innerText = "Gelandet auf " + p.userData.name;
+                rocketGroup.visible = true; // Schiff bleibt stehen
+                camera.position.set(p.position.x, p.userData.size + playerHeight, p.position.z + 5);
+                document.getElementById("info").innerText = "BETRETE OBERFLÄCHE: " + p.userData.name;
+                document.getElementById("crosshair").style.display = "block";
             }
         });
     }
-    if (e.key.toLowerCase() === "q" && landed) {
+    // Starten
+    if (e.key === "q" && landed) {
         landed = false;
-        velocity.add(new THREE.Vector3(0, 0.5, 0).applyQuaternion(rocketGroup.quaternion));
-        document.getElementById("info").innerText = "Startvorgang eingeleitet...";
+        rocketGroup.position.copy(camera.position);
+        document.getElementById("info").innerText = "SYSTEMS ONLINE - SPACE MODE";
+        document.getElementById("crosshair").style.display = "none";
     }
-    if (e.key.toLowerCase() === "c") cockpit = !cockpit;
+    if (e.key === "c") cockpit = !cockpit;
 });
 
-/* =====================
-   ANIMATION LOOP
-===================== */
 function animate() {
     requestAnimationFrame(animate);
-    
-    moveRocket();
-    updateCamera();
-    
-    planets.forEach(p => p.rotation.y += 0.002);
-    
+
+    if (!landed) {
+        updateSpacePhysics();
+        // Kamera folgt Schiff
+        if (!cockpit) {
+            const ideal = new THREE.Vector3(0, 3, 12).applyQuaternion(rocketGroup.quaternion).add(rocketGroup.position);
+            camera.position.lerp(ideal, 0.1);
+            camera.lookAt(rocketGroup.position);
+        } else {
+            camera.position.copy(rocketGroup.position);
+            camera.quaternion.copy(rocketGroup.quaternion);
+        }
+    } else {
+        updateWalking();
+    }
+
+    planets.forEach(p => p.rotation.y += 0.001);
     renderer.render(scene, camera);
 }
+
 animate();
+
+/* =====================
+   STARFIELD BG
+===================== */
+const starGeo = new THREE.BufferGeometry();
+const starV = [];
+for(let i=0; i<30000; i++) starV.push((Math.random()-0.5)*40000, (Math.random()-0.5)*40000, (Math.random()-0.5)*40000);
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starV, 3));
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({color: 0xffffff, size: 2})));
 
 window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-// Laser Effekt
-window.addEventListener("mousedown", () => {
-    const laserGeo = new THREE.BufferGeometry().setFromPoints([
-        rocketGroup.position.clone(),
-        rocketGroup.position.clone().add(new THREE.Vector3(0,0,-50).applyQuaternion(rocketGroup.quaternion))
-    ]);
-    const laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({color: 0x00ffff}));
-    scene.add(laser);
-    setTimeout(() => scene.remove(laser), 50);
-});
-
 </script>
 </body>
 </html>
