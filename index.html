@@ -2,34 +2,25 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GALAXY SYSTEM</title>
+<title>GALAXY ENGINE</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/lucide@latest"></script>
-
-<!-- THREE JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <style>
-body { margin:0; overflow:hidden; background:black; color:white; font-family:sans-serif;}
+body { margin:0; overflow:hidden; background:black; }
 #ui {
     position:absolute;
     top:20px;
     left:20px;
+    color:white;
     z-index:10;
 }
 .panel {
     background:rgba(0,0,0,0.6);
     padding:15px;
     border:1px solid rgba(0,150,255,0.3);
-    backdrop-filter: blur(10px);
-    max-width:300px;
-}
-button {
-    margin-top:5px;
-    padding:5px 10px;
-    background:#0ea5e9;
+    margin-bottom:10px;
 }
 </style>
 </head>
@@ -38,160 +29,203 @@ button {
 
 <div id="ui">
     <div class="panel">
-        <h2>🛰️ Galaxy Control</h2>
-        <p id="userPos">Lade Standort...</p>
-        <p>Klicke einen Planeten 👇</p>
+        <b>🚀 SPACE CONTROL</b><br>
+        WASD = bewegen<br>
+        Maus = schauen<br>
+        Scroll = Zoom<br>
+        Klick = Planet auswählen
     </div>
 
-    <div id="planetInfo" class="panel mt-4 hidden"></div>
+    <div id="info" class="panel">Bereit...</div>
 </div>
 
 <script>
+
 /* =====================
-   SCENE
+   BASIC SETUP
 ===================== */
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({antialias:true});
 
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+camera.position.z = 50;
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-/* =====================
-   LIGHT
-===================== */
-const light = new THREE.PointLight(0xffffff, 2, 300);
+const light = new THREE.PointLight(0xffffff, 2);
 scene.add(light);
 
 /* =====================
-   STARS
+   STARFIELD
 ===================== */
 const starGeo = new THREE.BufferGeometry();
-const starVertices = [];
+let starVertices = [];
 
-for(let i=0;i<10000;i++){
+for(let i=0;i<15000;i++){
     starVertices.push(
-        Math.random()*2000-1000,
-        Math.random()*2000-1000,
-        Math.random()*2000-1000
+        Math.random()*4000-2000,
+        Math.random()*4000-2000,
+        Math.random()*4000-2000
     );
 }
 
 starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVertices,3));
-const starMat = new THREE.PointsMaterial({color:0xffffff});
-const stars = new THREE.Points(starGeo, starMat);
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({color:0xffffff}));
 scene.add(stars);
 
 /* =====================
-   PLANETS DATA (ECHT)
+   GALAXY SPIRALS
 ===================== */
-const planetsData = [
-{ name:"Merkur", size:1, dist:10, color:0xaaaaaa, info:"Kleinster Planet. Sehr heiß & kalt." },
-{ name:"Venus", size:1.5, dist:15, color:0xffcc66, info:"Heißester Planet (~470°C)." },
-{ name:"Erde", size:1.6, dist:20, color:0x3399ff, info:"Unser Zuhause 🌍" },
-{ name:"Mars", size:1.2, dist:25, color:0xff3300, info:"Roter Planet. Früher evtl. Wasser." },
-{ name:"Jupiter", size:4, dist:35, color:0xff9966, info:"Größter Planet." },
-{ name:"Saturn", size:3.5, dist:45, color:0xffcc99, info:"Hat Ringe." },
-{ name:"Uranus", size:2.5, dist:55, color:0x66ffff, info:"Rotiert seitlich." },
-{ name:"Neptun", size:2.5, dist:65, color:0x3366ff, info:"Stärkste Winde." }
-];
+function createGalaxy(offsetX){
+    const geo = new THREE.BufferGeometry();
+    let verts = [];
 
-let planets = [];
+    for(let i=0;i<4000;i++){
+        let angle = i*0.1;
+        let radius = i*0.02;
+
+        let x = Math.cos(angle)*radius + offsetX;
+        let z = Math.sin(angle)*radius;
+        let y = (Math.random()-0.5)*2;
+
+        verts.push(x,y,z);
+    }
+
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
+    scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:0.1})));
+}
+
+// mehrere Galaxien
+createGalaxy(0);
+createGalaxy(300);
+createGalaxy(-300);
 
 /* =====================
-   CREATE PLANETS
+   TEXTURES
 ===================== */
-planetsData.forEach(p => {
-    const geo = new THREE.SphereGeometry(p.size, 32, 32);
-    const mat = new THREE.MeshStandardMaterial({color:p.color});
-    const mesh = new THREE.Mesh(geo, mat);
+const loader = new THREE.TextureLoader();
 
-    mesh.position.x = p.dist;
-    mesh.userData = p;
+const earthTex = loader.load("https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg");
 
+/* =====================
+   PLANETS
+===================== */
+const planets = [];
+
+function createPlanet(name, size, dist, texture){
+    const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(size, 64,64),
+        new THREE.MeshStandardMaterial({map:texture})
+    );
+    mesh.position.x = dist;
+    mesh.userData.name = name;
     scene.add(mesh);
     planets.push(mesh);
+}
+
+createPlanet("Erde", 3, 20, earthTex);
+
+/* =====================
+   ISS (LIVE API)
+===================== */
+const iss = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5,0.5,1),
+    new THREE.MeshBasicMaterial({color:0xffffff})
+);
+scene.add(iss);
+
+async function updateISS(){
+    try{
+        const res = await fetch("https://api.wheretheiss.at/v1/satellites/25544");
+        const data = await res.json();
+
+        // Mapping Position fake auf Szene
+        iss.position.x = data.latitude;
+        iss.position.z = data.longitude;
+
+        document.getElementById("info").innerText =
+            "ISS Position: " + data.latitude.toFixed(2) + " / " + data.longitude.toFixed(2);
+
+    }catch(e){}
+}
+
+setInterval(updateISS, 5000);
+
+/* =====================
+   NASA DATA
+===================== */
+async function loadNASA(){
+    const res = await fetch("https://api.le-systeme-solaire.net/rest/bodies/");
+    const data = await res.json();
+    console.log(data);
+}
+loadNASA();
+
+/* =====================
+   CONTROLS (WASD + MOUSE)
+===================== */
+let keys = {};
+window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+let mouseX=0, mouseY=0;
+
+window.addEventListener("mousemove", e=>{
+    mouseX = (e.clientX/window.innerWidth -0.5)*2;
+    mouseY = (e.clientY/window.innerHeight -0.5)*2;
+});
+
+window.addEventListener("wheel", e=>{
+    camera.position.z += e.deltaY * 0.05;
 });
 
 /* =====================
-   CAMERA
-===================== */
-camera.position.z = 80;
-
-/* =====================
-   CLICK SYSTEM
+   CLICK PLANET
 ===================== */
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-window.addEventListener("click", (event)=>{
-    mouse.x = (event.clientX / innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / innerHeight) * 2 + 1;
+window.addEventListener("click", e=>{
+    mouse.x = (e.clientX/innerWidth)*2-1;
+    mouse.y = -(e.clientY/innerHeight)*2+1;
 
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(planets);
+    raycaster.setFromCamera(mouse,camera);
+    const hit = raycaster.intersectObjects(planets);
 
-    if(intersects.length > 0){
-        const planet = intersects[0].object;
-        showPlanetInfo(planet.userData);
+    if(hit.length>0){
+        let p = hit[0].object;
+        document.getElementById("info").innerText = "Planet: " + p.userData.name;
 
-        // Kamera Flug 🚀
-        const target = planet.position.clone();
-        animateCamera(target);
+        camera.position.set(p.position.x, p.position.y, p.position.z+5);
     }
 });
 
 /* =====================
-   CAMERA ANIMATION
+   MOVE
 ===================== */
-function animateCamera(target){
-    let step = 0;
+function move(){
+    let speed = 0.8;
 
-    const interval = setInterval(()=>{
-        step += 0.02;
-        camera.position.lerp(new THREE.Vector3(target.x, target.y, target.z+5), step);
+    if(keys["w"]) camera.position.z -= speed;
+    if(keys["s"]) camera.position.z += speed;
+    if(keys["a"]) camera.position.x -= speed;
+    if(keys["d"]) camera.position.x += speed;
 
-        if(step >= 1) clearInterval(interval);
-    },16);
+    camera.rotation.y = -mouseX * 0.5;
+    camera.rotation.x = -mouseY * 0.3;
 }
 
 /* =====================
-   PLANET INFO PANEL
-===================== */
-function showPlanetInfo(data){
-    const el = document.getElementById("planetInfo");
-    el.classList.remove("hidden");
-
-    el.innerHTML = `
-    <h3>${data.name}</h3>
-    <p>${data.info}</p>
-    <button onclick="resetCam()">Zurück</button>
-    `;
-}
-
-/* =====================
-   RESET CAMERA
-===================== */
-function resetCam(){
-    camera.position.set(0,0,80);
-}
-
-/* =====================
-   USER LOCATION 🌍
-===================== */
-navigator.geolocation.getCurrentPosition(pos=>{
-    document.getElementById("userPos").innerText =
-    "Dein Standort: " + pos.coords.latitude.toFixed(2) + " / " + pos.coords.longitude.toFixed(2);
-});
-
-/* =====================
-   ANIMATION LOOP
+   LOOP
 ===================== */
 function animate(){
     requestAnimationFrame(animate);
 
+    move();
+
     planets.forEach(p=>{
-        p.rotation.y += 0.01;
+        p.rotation.y += 0.005;
     });
 
     renderer.render(scene, camera);
@@ -206,6 +240,7 @@ window.addEventListener("resize", ()=>{
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
 });
+
 </script>
 
 </body>
