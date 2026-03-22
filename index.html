@@ -1,13 +1,89 @@
-<div class="bg-gray-900/50 backdrop-blur-xl border border-white/10 p-6 rounded-3xl group transition-all hover:border-blue-500">
-  <div class="flex justify-between items-start mb-4">
-    <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Live Feed // 01</span>
-    <div class="h-2 w-2 bg-red-600 rounded-full animate-pulse"></div>
-  </div>
-  
-  <h3 class="text-2xl font-bold text-white mb-2">Dome Camera X-2</h3>
-  <p class="text-gray-400 text-sm mb-6">4K Ultra-Wide mit Nachtsicht-Modus.</p>
-  
-  <button class="w-full py-3 bg-white text-black font-bold rounded-xl transition-transform active:scale-95 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-    ANSICHT ÖFFNEN
-  </button>
-</div>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SECURE / TECH - Glocken, Kameras, Sirenen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #050505; color: white; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glow:hover { box-shadow: 0 0 30px rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.5); }
+    </style>
+</head>
+<body class="antialiased overflow-x-hidden">
+
+    <nav class="p-6 flex justify-between items-center max-w-7xl mx-auto">
+        <div class="text-2xl font-black tracking-tighter uppercase italic">Secure<span class="text-blue-500 underline">Tech</span></div>
+        <div class="hidden md:flex space-x-8 text-sm font-medium tracking-widest text-gray-400">
+            <a href="#" class="hover:text-white transition">SYSTEME</a>
+            <a href="#" class="hover:text-white transition">HARDWARE</a>
+            <a href="#" class="hover:text-white transition">KONTAKT</a>
+        </div>
+    </nav>
+
+    <header class="py-20 px-6 max-w-7xl mx-auto text-center">
+        <h1 class="text-6xl md:text-8xl font-black mb-6 tracking-tighter uppercase leading-none">
+            Die Zukunft der <br><span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Sicherheit.</span>
+        </h1>
+        <p class="text-gray-400 max-w-2xl mx-auto text-lg md:text-xl font-light">
+            Glocken, Kameras und Sirenen. Reduziert auf das Maximum. Hochmodernes Interface für professionelle Ansprüche.
+        </p>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div class="glass p-8 rounded-[2rem] md:col-span-2 glow transition-all group">
+            <div class="flex justify-between items-center mb-12">
+                <i data-lucide="camera" class="w-10 h-10 text-blue-500"></i>
+                <span class="bg-red-500/10 text-red-500 text-[10px] font-bold px-3 py-1 rounded-full animate-pulse">LIVE ANALYTICS</span>
+            </div>
+            <h2 class="text-4xl font-bold mb-4">Überwachung</h2>
+            <p class="text-gray-400 mb-8">AI-gestützte Kamerasysteme mit 4K-Auflösung und thermaler Erkennung.</p>
+            <div class="aspect-video w-full bg-black/50 rounded-2xl border border-white/5 overflow-hidden relative">
+                <div class="absolute inset-0 flex items-center justify-center text-white/20 font-mono text-xs italic tracking-widest">
+                    [ STREAM_ACTIVE // 001 ]
+                </div>
+            </div>
+        </div>
+
+        <div class="glass p-8 rounded-[2rem] glow transition-all">
+            <i data-lucide="bell" class="w-10 h-10 text-yellow-500 mb-12"></i>
+            <h2 class="text-3xl font-bold mb-4">Signaltechnik</h2>
+            <p class="text-gray-400 mb-6">Präzise Industrieglocken für akustische Signale in jeder Umgebung.</p>
+            <button class="w-full py-4 bg-white text-black font-black rounded-xl hover:scale-[1.02] transition">DETAILS</button>
+        </div>
+
+        <div class="glass p-8 rounded-[2rem] glow transition-all">
+            <i data-lucide="megaphone" class="w-10 h-10 text-red-500 mb-12"></i>
+            <h2 class="text-3xl font-bold mb-4">Sirenen</h2>
+            <p class="text-gray-400 mb-6">120dB Hochleistungssirenen für Alarmierungen im Ernstfall.</p>
+            <div class="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
+                <div class="bg-red-600 h-full w-2/3"></div>
+            </div>
+        </div>
+
+        <div class="glass p-8 rounded-[2rem] md:col-span-2 flex items-center justify-between glow transition-all">
+            <div>
+                <h3 class="text-xl font-bold">Systemstatus: Optimal</h3>
+                <p class="text-gray-500 text-sm italic">Alle Komponenten sind online und einsatzbereit.</p>
+            </div>
+            <div class="flex -space-x-3">
+                <div class="w-12 h-12 rounded-full border-4 border-black bg-gray-800 flex items-center justify-center"><i data-lucide="shield-check" class="w-5 h-5"></i></div>
+                <div class="w-12 h-12 rounded-full border-4 border-black bg-gray-800 flex items-center justify-center"><i data-lucide="cpu" class="w-5 h-5"></i></div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="py-20 text-center text-gray-600 text-[10px] tracking-[0.3em] uppercase">
+        &copy; 2024 SecureTech Systems // No Limits
+    </footer>
+
+    <script>
+      lucide.createIcons();
+    </script>
+</body>
+</html>
