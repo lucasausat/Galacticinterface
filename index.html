@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>SPACE GAME</title>
+<title>SPACE GAME AAA</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -32,11 +32,17 @@ body { margin:0; overflow:hidden; background:black; }
         SHIFT = Boost<br>
         E = Landen<br>
         Q = zurück ins All<br>
+        C = Kamera wechseln<br>
+        CLICK = Laser
     </div>
     <div id="info" class="panel mt-2">Space ready...</div>
 </div>
 
 <script>
+
+/* =====================
+   BASIC SETUP
+===================== */
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 10000);
@@ -47,7 +53,7 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 /* =====================
-   LIGHT (SUN)
+   LIGHT
 ===================== */
 const sunLight = new THREE.PointLight(0xffffff, 3, 0);
 scene.add(sunLight);
@@ -65,38 +71,69 @@ for(let i=0;i<20000;i++){
         Math.random()*8000-4000
     );
 }
-
 starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVertices,3));
 scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0xffffff})));
 
 /* =====================
-   PLANETS (ALLE)
+   TEXTURES
+===================== */
+const loader = new THREE.TextureLoader();
+const textures = {
+    sun: loader.load("https://threejs.org/examples/textures/planets/sun.jpg"),
+    earth: loader.load("https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg"),
+    earthNight: loader.load("https://threejs.org/examples/textures/planets/earth_lights_2048.png"),
+    mars: loader.load("https://threejs.org/examples/textures/planets/mars_1024.jpg"),
+    jupiter: loader.load("https://threejs.org/examples/textures/planets/jupiter.jpg"),
+    saturn: loader.load("https://threejs.org/examples/textures/planets/saturn.jpg")
+};
+
+/* =====================
+   PLANETS
 ===================== */
 const planets = [];
 
-function planet(name,size,dist,color){
+function planet(name,size,dist){
     const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(size,64,64),
-        new THREE.MeshStandardMaterial({color:color})
+        new THREE.MeshStandardMaterial()
     );
     mesh.position.x = dist;
     mesh.userData = {name:name,size:size};
     scene.add(mesh);
     planets.push(mesh);
+
+    // Texturen
+    if(name==="Erde"){
+        mesh.material.map = textures.earth;
+
+        const night = new THREE.Mesh(
+            new THREE.SphereGeometry(size+0.01,64,64),
+            new THREE.MeshBasicMaterial({
+                map:textures.earthNight,
+                transparent:true,
+                opacity:0.6
+            })
+        );
+        night.position.copy(mesh.position);
+        scene.add(night);
+    }
+
+    if(name==="Mars") mesh.material.map = textures.mars;
+    if(name==="Jupiter") mesh.material.map = textures.jupiter;
+    if(name==="Saturn") mesh.material.map = textures.saturn;
+    if(name==="Sonne") mesh.material.map = textures.sun;
 }
 
-// Sonne
-planet("Sonne",10,0,0xffcc00);
-
 // Planeten
-planet("Merkur",1,20,0xaaaaaa);
-planet("Venus",2,30,0xffcc66);
-planet("Erde",2.2,40,0x3399ff);
-planet("Mars",1.5,50,0xff3300);
-planet("Jupiter",5,70,0xff9966);
-planet("Saturn",4,90,0xffcc99);
-planet("Uranus",3,110,0x66ffff);
-planet("Neptun",3,130,0x3366ff);
+planet("Sonne",10,0);
+planet("Merkur",1,20);
+planet("Venus",2,30);
+planet("Erde",2.2,40);
+planet("Mars",1.5,50);
+planet("Jupiter",5,70);
+planet("Saturn",4,90);
+planet("Uranus",3,110);
+planet("Neptun",3,130);
 
 /* =====================
    ISS
@@ -106,11 +143,10 @@ const iss = new THREE.Mesh(
     new THREE.MeshBasicMaterial({color:0xffffff})
 );
 scene.add(iss);
-
 let issAngle = 0;
 
 /* =====================
-   ROCKET (PLAYER)
+   ROCKET
 ===================== */
 const rocket = new THREE.Mesh(
     new THREE.ConeGeometry(1,3,16),
@@ -119,15 +155,42 @@ const rocket = new THREE.Mesh(
 scene.add(rocket);
 
 /* =====================
+   ENGINE GLOW
+===================== */
+const engineGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5,16,16),
+    new THREE.MeshBasicMaterial({color:0x00ffff,transparent:true,opacity:0.7})
+);
+scene.add(engineGlow);
+
+/* =====================
+   ASTRONAUT
+===================== */
+const astronaut = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5,1,0.5),
+    new THREE.MeshBasicMaterial({color:0xffffff})
+);
+scene.add(astronaut);
+astronaut.visible = false;
+
+/* =====================
    CONTROLS
 ===================== */
 let keys = {};
 window.addEventListener("keydown", e=>keys[e.key.toLowerCase()]=true);
 window.addEventListener("keyup", e=>keys[e.key.toLowerCase()]=false);
 
-let speed = 0.5;
+/* =====================
+   PHYSICS
+===================== */
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let thrust = 0.02;
+let rotationSpeed = 0.03;
+
 let landed = false;
 let currentPlanet = null;
+let cockpit = false;
 
 /* =====================
    MOVE
@@ -136,56 +199,118 @@ function move(){
 
     if(landed) return;
 
-    let boost = keys["shift"] ? 3 : 1;
+    if(keys["a"]) rocket.rotation.y += rotationSpeed;
+    if(keys["d"]) rocket.rotation.y -= rotationSpeed;
 
-    if(keys["w"]) camera.position.z -= speed*boost;
-    if(keys["s"]) camera.position.z += speed*boost;
-    if(keys["a"]) camera.position.x -= speed*boost;
-    if(keys["d"]) camera.position.x += speed*boost;
+    direction.set(0,0,-1).applyQuaternion(rocket.quaternion);
 
+    if(keys["w"]) velocity.add(direction.clone().multiplyScalar(thrust));
+    if(keys["s"]) velocity.add(direction.clone().multiplyScalar(-thrust));
+
+    camera.position.add(velocity);
     rocket.position.copy(camera.position);
+
+    velocity.multiplyScalar(0.995);
 }
 
 /* =====================
-   LAND SYSTEM
+   LANDING
 ===================== */
 function checkLanding(){
     planets.forEach(p=>{
         const dist = camera.position.distanceTo(p.position);
 
-        if(dist < p.userData.size + 5){
-            if(keys["e"]){
-                landed = true;
-                currentPlanet = p;
+        if(dist < p.userData.size + 5 && keys["e"]){
+            landed = true;
+            currentPlanet = p;
 
-                camera.position.set(
-                    p.position.x,
-                    p.position.y + p.userData.size + 2,
-                    p.position.z
-                );
+            camera.position.set(
+                p.position.x,
+                p.position.y + p.userData.size + 2,
+                p.position.z
+            );
 
-                document.getElementById("info").innerText =
-                    "Gelandet auf " + p.userData.name;
-            }
+            document.getElementById("info").innerText = "Gelandet auf " + p.userData.name;
         }
     });
 }
 
-/* =====================
-   SURFACE MODE
-===================== */
 function surfaceMove(){
-    let moveSpeed = 0.2;
-
-    if(keys["w"]) camera.position.z -= moveSpeed;
-    if(keys["s"]) camera.position.z += moveSpeed;
-    if(keys["a"]) camera.position.x -= moveSpeed;
-    if(keys["d"]) camera.position.x += moveSpeed;
-
     if(keys["q"]){
         landed = false;
         camera.position.z += 20;
         document.getElementById("info").innerText = "Zurück im All";
+    }
+}
+
+/* =====================
+   LASER
+===================== */
+window.addEventListener("click", ()=>{
+    if(!landed) return;
+
+    const geo = new THREE.BufferGeometry().setFromPoints([
+        camera.position.clone(),
+        new THREE.Vector3(camera.position.x,camera.position.y,camera.position.z-10)
+    ]);
+
+    const laser = new THREE.Line(geo,new THREE.LineBasicMaterial({color:0x00ffff}));
+    scene.add(laser);
+    setTimeout(()=>scene.remove(laser),100);
+});
+
+/* =====================
+   CAMERA
+===================== */
+let camOffset = new THREE.Vector3(0,2,8);
+
+function updateCamera(){
+    if(cockpit) return;
+
+    let desired = rocket.position.clone().add(
+        camOffset.clone().applyQuaternion(rocket.quaternion)
+    );
+
+    camera.position.lerp(desired,0.1);
+    camera.lookAt(rocket.position);
+}
+
+/* =====================
+   COCKPIT
+===================== */
+window.addEventListener("keydown", e=>{
+    if(e.key.toLowerCase()==="c"){
+        cockpit=!cockpit;
+    }
+});
+
+/* =====================
+   HUD
+===================== */
+const hud = document.createElement("div");
+hud.style.position="absolute";
+hud.style.bottom="20px";
+hud.style.left="20px";
+hud.style.color="white";
+document.body.appendChild(hud);
+
+function updateHUD(){
+    hud.innerHTML = `
+    SPEED: ${velocity.length().toFixed(2)}<br>
+    MODE: ${landed ? "LAND" : "SPACE"}<br>
+    PLANET: ${currentPlanet ? currentPlanet.userData.name : "NONE"}
+    `;
+}
+
+/* =====================
+   MISSION
+===================== */
+let mission = {target:"Mars",completed:false};
+
+function checkMission(){
+    if(currentPlanet && currentPlanet.userData.name===mission.target && !mission.completed){
+        mission.completed=true;
+        document.getElementById("info").innerText="MISSION ERFOLGREICH 🚀";
     }
 }
 
@@ -200,13 +325,23 @@ function animate(){
         checkLanding();
     } else {
         surfaceMove();
+        astronaut.visible=true;
+        astronaut.position.copy(camera.position);
     }
+
+    updateHUD();
+    checkMission();
+    updateCamera();
+
+    engineGlow.position.copy(rocket.position);
+    engineGlow.position.z += 2;
+    engineGlow.scale.setScalar(1 + velocity.length()*2);
 
     planets.forEach(p=>p.rotation.y+=0.003);
 
-    issAngle += 0.01;
-    iss.position.x = Math.cos(issAngle)*45;
-    iss.position.z = Math.sin(issAngle)*45;
+    issAngle+=0.01;
+    iss.position.x=Math.cos(issAngle)*45;
+    iss.position.z=Math.sin(issAngle)*45;
 
     renderer.render(scene,camera);
 }
@@ -220,168 +355,8 @@ window.addEventListener("resize", ()=>{
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
 });
+
 </script>
 
 </body>
 </html>
-
-
-
-
-<script>
-
-/* =====================
-   ULTRA REAL TEXTURES
-===================== */
-const texLoader = new THREE.TextureLoader();
-
-const textures = {
-    sun: texLoader.load("https://threejs.org/examples/textures/planets/sun.jpg"),
-    earth: texLoader.load("https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg"),
-    earthNight: texLoader.load("https://threejs.org/examples/textures/planets/earth_lights_2048.png"),
-    mars: texLoader.load("https://threejs.org/examples/textures/planets/mars_1024.jpg"),
-    jupiter: texLoader.load("https://threejs.org/examples/textures/planets/jupiter.jpg"),
-    saturn: texLoader.load("https://threejs.org/examples/textures/planets/saturn.jpg")
-};
-
-/* =====================
-   APPLY TEXTURES
-===================== */
-planets.forEach(p=>{
-    if(p.userData.name === "Erde"){
-        p.material.map = textures.earth;
-
-        // City Lights Layer
-        const night = new THREE.Mesh(
-            new THREE.SphereGeometry(p.userData.size+0.01,64,64),
-            new THREE.MeshBasicMaterial({
-                map: textures.earthNight,
-                transparent:true,
-                opacity:0.6
-            })
-        );
-        night.position.copy(p.position);
-        scene.add(night);
-    }
-
-    if(p.userData.name === "Mars"){
-        p.material.map = textures.mars;
-    }
-
-    if(p.userData.name === "Jupiter"){
-        p.material.map = textures.jupiter;
-    }
-
-    if(p.userData.name === "Saturn"){
-        p.material.map = textures.saturn;
-    }
-
-    if(p.userData.name === "Sonne"){
-        p.material.map = textures.sun;
-    }
-
-    p.material.needsUpdate = true;
-});
-
-/* =====================
-   MISSION SYSTEM
-===================== */
-let mission = {
-    target: "Mars",
-    completed:false
-};
-
-function checkMission(){
-    if(currentPlanet && currentPlanet.userData.name === mission.target && !mission.completed){
-        mission.completed = true;
-        document.getElementById("info").innerText = "MISSION ERFOLGREICH: Mars erreicht 🚀";
-    }
-}
-
-/* =====================
-   ASTRONAUT (ON LAND)
-===================== */
-const astronaut = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5,1,0.5),
-    new THREE.MeshBasicMaterial({color:0xffffff})
-);
-scene.add(astronaut);
-astronaut.visible = false;
-
-/* =====================
-   LASER / MINING
-===================== */
-const laserMat = new THREE.LineBasicMaterial({color:0x00ffff});
-
-function shootLaser(){
-    const points = [];
-    points.push(camera.position.clone());
-    points.push(new THREE.Vector3(
-        camera.position.x,
-        camera.position.y,
-        camera.position.z - 10
-    ));
-
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const laser = new THREE.Line(geo, laserMat);
-
-    scene.add(laser);
-
-    setTimeout(()=>scene.remove(laser), 100);
-}
-
-window.addEventListener("click", ()=>{
-    if(landed){
-        shootLaser();
-    }
-});
-
-/* =====================
-   VIEW MODES (COCKPIT)
-===================== */
-let cockpit = false;
-
-window.addEventListener("keydown", e=>{
-    if(e.key.toLowerCase() === "c"){
-        cockpit = !cockpit;
-
-        if(cockpit){
-            camera.position.set(rocket.position.x, rocket.position.y+1, rocket.position.z);
-            document.getElementById("info").innerText = "Cockpit Ansicht aktiviert";
-        } else {
-            camera.position.z += 10;
-            document.getElementById("info").innerText = "Außenansicht";
-        }
-    }
-});
-
-/* =====================
-   UPDATE LOOP ADDONS
-===================== */
-const oldAnimate = animate;
-
-animate = function(){
-    requestAnimationFrame(animate);
-
-    if(!landed){
-        move();
-        checkLanding();
-    } else {
-        surfaceMove();
-
-        astronaut.visible = true;
-        astronaut.position.copy(camera.position);
-    }
-
-    checkMission();
-
-    planets.forEach(p=>p.rotation.y+=0.003);
-
-    issAngle += 0.01;
-    iss.position.x = Math.cos(issAngle)*45;
-    iss.position.z = Math.sin(issAngle)*45;
-
-    renderer.render(scene,camera);
-};
-
-</script>
