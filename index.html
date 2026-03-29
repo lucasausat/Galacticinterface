@@ -2,236 +2,208 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>SPACE EXPLORER PRO - MODERN</title>
+<title>SPACE EXPLORER PRO - NEXT GEN</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <style>
-body { margin:0; overflow:hidden; background:black; font-family: monospace; }
-
-/* HUD */
-#hud { position:absolute; width:100%; height:100%; color:#00f2ff; pointer-events:none; }
-
-#topBar {
-    position:absolute; top:20px; left:50%;
-    transform:translateX(-50%);
-    display:flex; gap:40px; font-size:14px;
-}
-
-#bottomBar {
-    position:absolute; bottom:20px; left:50%;
-    transform:translateX(-50%);
-    display:flex; gap:60px;
-}
-
-#centerReticle {
-    position:absolute; top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    font-size:22px;
-}
+    body { margin:0; overflow:hidden; background:#000; font-family: 'Courier New', monospace; }
+    #hud { 
+        position:absolute; width:100%; height:100%; 
+        color:#00f2ff; pointer-events:none;
+        text-shadow: 0 0 5px #00f2ff;
+    }
+    .panel { position:absolute; background: rgba(0, 20, 30, 0.5); padding: 15px; border: 1px solid #00f2ff; border-radius: 4px; }
+    #topBar { top:20px; left:50%; transform:translateX(-50%); display:flex; gap:40px; }
+    #bottomBar { bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:60px; }
+    #fuelContainer { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); width: 30px; height: 200px; border: 1px solid #00f2ff; }
+    #fuelBar { position: absolute; bottom: 0; width: 100%; background: #00f2ff; transition: height 0.1s; shadow: 0 0 10px #00f2ff; }
+    #warning { position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); color: #ff3300; font-size: 24px; display: none; font-weight: bold; }
 </style>
 </head>
-
 <body>
 
 <div id="hud">
-    <div id="topBar">
-        <span id="target">TARGET: NONE</span>
-        <span id="distance">DIST: 0 km</span>
+    <div id="warning">COLLISION IMMINENT / LOW FUEL</div>
+    
+    <div id="topBar" class="panel">
+        <span id="target">SCANNING...</span>
+        <span id="distance">DIST: ---</span>
     </div>
 
-    <div id="centerReticle">⦿</div>
+    <div id="fuelContainer">
+        <div id="fuelBar" style="height: 100%;"></div>
+    </div>
 
-    <div id="bottomBar">
-        <div>SPEED: <span id="speed">0</span> km/s</div>
+    <div id="bottomBar" class="panel">
+        <div>SPD: <span id="speed">0</span> km/s</div>
+        <div>FUEL: <span id="fuelPerc">100</span>%</div>
         <div>MODE: <span id="mode">CRUISE</span></div>
     </div>
 </div>
 
 <script>
+/** SETUP **/
 const scene = new THREE.Scene();
-
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 50000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
-const loader = new THREE.TextureLoader();
+// Licht & Ambiente
+const sunLight = new THREE.PointLight(0xffffff, 2, 5000);
+scene.add(sunLight);
+scene.add(new THREE.AmbientLight(0x222244));
 
-/* LIGHT */
-scene.add(new THREE.PointLight(0xffffff,2));
+/** GAME STATE **/
+let fuel = 100;
+let keys = {};
+let velocity = new THREE.Vector3();
+let currentRoll = 0;
+let warp = false;
 
-/* SHIP */
+/** SHIP **/
 const ship = new THREE.Group();
-scene.add(ship);
-
 const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.5,0.6,3,16),
-    new THREE.MeshStandardMaterial({color:0xdddddd, metalness:1})
+    new THREE.CylinderGeometry(0.4, 0.6, 3, 16),
+    new THREE.MeshStandardMaterial({color: 0x888888, metalness: 0.8, roughness: 0.2})
 );
 body.rotation.x = Math.PI/2;
 ship.add(body);
 
 const engineGlow = new THREE.Mesh(
-    new THREE.SphereGeometry(0.4,16,16),
-    new THREE.MeshBasicMaterial({color:0x00ffff})
+    new THREE.SphereGeometry(0.5, 16, 16),
+    new THREE.MeshBasicMaterial({color: 0x00f2ff})
 );
-engineGlow.position.z = 1.5;
+engineGlow.position.z = 1.6;
 ship.add(engineGlow);
+scene.add(ship);
 
-/* PLANETS */
+/** WORLD OBJECTS **/
+const collidables = [];
 const planets = [];
-function createPlanet(name,size,x,z){
-    const p = new THREE.Mesh(
-        new THREE.SphereGeometry(size,32,32),
-        new THREE.MeshStandardMaterial({color:Math.random()*0xffffff})
-    );
-    p.position.set(x,0,z);
-    p.userData = {name,size};
+
+function createPlanet(name, size, pos, color) {
+    const geo = new THREE.SphereGeometry(size, 64, 64);
+    const mat = new THREE.MeshStandardMaterial({color: color, emissive: color, emissiveIntensity: 0.1});
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    p.userData = { name, radius: size };
     scene.add(p);
     planets.push(p);
-}
-createPlanet("Terra",10,800,-600);
-createPlanet("Mars",8,-500,-200);
-
-/* ASTEROIDS */
-const asteroids = [];
-for(let i=0;i<200;i++){
-    const a = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(Math.random()*2),
-        new THREE.MeshStandardMaterial({color:0x888888})
-    );
-    a.position.set(
-        Math.random()*2000-1000,
-        Math.random()*200-100,
-        Math.random()*2000-1000
-    );
-    scene.add(a);
-    asteroids.push(a);
+    collidables.push(p);
 }
 
-/* STATIONS */
-const stations = [];
-for(let i=0;i<5;i++){
-    const s = new THREE.Mesh(
-        new THREE.BoxGeometry(5,2,5),
-        new THREE.MeshStandardMaterial({color:0x6666ff})
+createPlanet("Aethelgard", 50, new THREE.Vector3(500, 0, -800), 0x2255ff);
+createPlanet("Ignis", 40, new THREE.Vector3(-600, 50, -400), 0xff4400);
+
+// Asteroiden-Gürtel
+for(let i=0; i<300; i++) {
+    const ast = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(Math.random() * 3 + 1, 1),
+        new THREE.MeshStandardMaterial({color: 0x555555})
     );
-    s.userData = {
-        angle: Math.random()*Math.PI*2,
-        radius: 400,
-        speed: 0.002
-    };
-    scene.add(s);
-    stations.push(s);
+    ast.position.set((Math.random()-0.5)*2000, (Math.random()-0.5)*500, (Math.random()-0.5)*2000);
+    ast.userData = { radius: 3 }; 
+    scene.add(ast);
+    collidables.push(ast);
 }
 
-/* STARS */
-const starGeo = new THREE.BufferGeometry();
-const starV=[];
-for(let i=0;i<20000;i++){
-    starV.push(
-        (Math.random()-0.5)*40000,
-        (Math.random()-0.5)*40000,
-        (Math.random()-0.5)*40000
-    );
-}
-starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starV,3));
-scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({size:1})));
-
-/* CONTROLS */
-let keys={}, velocity=new THREE.Vector3();
-let speed=0, warp=false;
-
-addEventListener("keydown",e=>{
-    keys[e.key.toLowerCase()]=true;
-    if(e.key==="f") warp=!warp; // WARP TOGGLE
+/** CONTROLS **/
+window.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+    if(e.key.toLowerCase() === "f" && fuel > 10) warp = !warp;
 });
-addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-/* TARGET */
-function getClosestPlanet(){
-    let c=null, d=Infinity;
-    planets.forEach(p=>{
-        let dist=ship.position.distanceTo(p.position);
-        if(dist<d){ d=dist; c=p; }
-    });
-    return c;
-}
+/** LOGIC **/
+function checkCollisions() {
+    for (let obj of collidables) {
+        let dist = ship.position.distanceTo(obj.position);
+        let minDist = (obj.userData.radius || 2) + 1.5;
 
-/* SCAN */
-function scan(){
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(0,0), camera);
-    const hit = ray.intersectObjects(planets);
-    if(hit.length>0){
-        document.getElementById("mode").innerText =
-        "SCAN: " + hit[0].object.userData.name;
+        if (dist < minDist) {
+            // Aufprall-Reaktion
+            velocity.multiplyScalar(-0.5); 
+            document.getElementById("warning").style.display = "block";
+            setTimeout(() => document.getElementById("warning").style.display = "none", 1000);
+            return true;
+        }
     }
+    return false;
 }
 
-/* UPDATE */
-function update(){
+function update() {
+    if (fuel <= 0) { warp = false; keys["w"] = false; }
 
-    let acc = warp ? 0.5 : (keys["shift"]?0.08:0.02);
+    // Physik & Beschleunigung
+    let accVal = warp ? 0.8 : (keys["shift"] ? 0.15 : 0.04);
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.quaternion);
 
-    const dir = new THREE.Vector3(0,0,-1).applyQuaternion(ship.quaternion);
+    if (keys["w"] && fuel > 0) {
+        velocity.add(dir.clone().multiplyScalar(accVal));
+        fuel -= warp ? 0.2 : 0.02; // Kraftstoffverbrauch
+    }
+    
+    // Rotation & Neigung (Banking)
+    let targetRoll = 0;
+    if (keys["a"]) { ship.rotation.y += 0.03; targetRoll = 0.6; }
+    if (keys["d"]) { ship.rotation.y -= 0.03; targetRoll = -0.6; }
+    
+    // Smooth Banking
+    currentRoll += (targetRoll - currentRoll) * 0.05;
+    ship.rotation.z = currentRoll;
 
-    if(keys["w"]) velocity.add(dir.clone().multiplyScalar(acc));
-    if(keys["s"]) velocity.add(dir.clone().multiplyScalar(-acc));
-
-    if(keys["a"]) ship.rotation.y+=0.03;
-    if(keys["d"]) ship.rotation.y-=0.03;
-
+    // Bewegung anwenden
     ship.position.add(velocity);
-    velocity.multiplyScalar(0.99);
+    velocity.multiplyScalar(0.98); // Reibung im All (Dämpfung)
 
-    speed = velocity.length()*10;
+    checkCollisions();
 
-    document.getElementById("speed").innerText = Math.floor(speed);
-    document.getElementById("mode").innerText = warp ? "WARP" : "CRUISE";
-
-    engineGlow.scale.setScalar(1+velocity.length()*0.5);
+    // UI Update
+    let spd = velocity.length() * 100;
+    document.getElementById("speed").innerText = Math.floor(spd);
+    document.getElementById("fuelBar").style.height = fuel + "%";
+    document.getElementById("fuelPerc").innerText = Math.floor(fuel);
+    document.getElementById("mode").innerText = warp ? "WARP DRIVE" : "SUBLIGHT";
+    
+    if(fuel < 20) document.getElementById("fuelBar").style.background = "#ff3300";
+    
+    // Engine FX
+    engineGlow.scale.setScalar(keys["w"] ? (warp ? 4 : 2) : 1);
 }
 
-/* ANIMATE */
-function animate(){
+function animate() {
     requestAnimationFrame(animate);
-
     update();
-    scan();
 
-    /* camera cockpit */
-    camera.position.copy(ship.position);
-    camera.position.add(new THREE.Vector3(0,1,0));
-    camera.quaternion.copy(ship.quaternion);
+    // Dynamische Kamera (folgt Schiff mit leichter Verzögerung/Trägheit)
+    const offset = new THREE.Vector3(0, 1.5, 6).applyQuaternion(ship.quaternion);
+    camera.position.lerp(ship.position.clone().add(offset), 0.1);
+    camera.lookAt(ship.position.clone().add(new THREE.Vector3(0,0,-10).applyQuaternion(ship.quaternion)));
 
-    /* stations move */
-    stations.forEach(s=>{
-        s.userData.angle += s.userData.speed;
-        s.position.x = Math.cos(s.userData.angle)*s.userData.radius;
-        s.position.z = Math.sin(s.userData.angle)*s.userData.radius;
+    // Target System
+    let closest = null; let dMin = Infinity;
+    planets.forEach(p => {
+        let d = ship.position.distanceTo(p.position);
+        if(d < dMin) { dMin = d; closest = p; }
     });
-
-    /* target UI */
-    const t = getClosestPlanet();
-    if(t){
-        document.getElementById("target").innerText = "TARGET: "+t.userData.name;
-        document.getElementById("distance").innerText =
-        "DIST: "+Math.floor(ship.position.distanceTo(t.position));
+    if(closest) {
+        document.getElementById("target").innerText = "OBJECT: " + closest.userData.name;
+        document.getElementById("distance").innerText = "DIST: " + Math.floor(dMin) + " km";
     }
 
-    renderer.render(scene,camera);
+    renderer.render(scene, camera);
 }
+
 animate();
 
-/* RESIZE */
-addEventListener("resize",()=>{
-    camera.aspect=innerWidth/innerHeight;
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth,innerHeight);
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
-
 </body>
 </html>
