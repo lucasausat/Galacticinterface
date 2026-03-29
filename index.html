@@ -1,197 +1,237 @@
-+<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>SPACE EXPLORER PRO - AAA</title>
+<title>SPACE EXPLORER PRO - MODERN</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
 <style>
-body { margin:0; overflow:hidden; background:black; font-family: 'Segoe UI', sans-serif; }
-#ui { position:absolute; top:20px; left:20px; color:white; z-index:10; pointer-events:none; }
-.panel { background:rgba(0,10,20,0.8); padding:15px; border:1px solid #00f2ff; border-radius: 12px; box-shadow: 0 0 15px rgba(0,242,255,0.2); }
-#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: cyan; font-size: 24px; display: none; }
-#radar { position:absolute; bottom:20px; right:20px; width:150px; height:150px; border:2px solid cyan; border-radius:50%; background:rgba(0,0,0,0.5); z-index:10; }
-#planetOverlay { position:absolute; top:50px; right:20px; width:220px; background:rgba(0,0,30,0.9); padding:10px; border-radius:12px; border:1px solid cyan; display:none; color:white; z-index:10; font-family:monospace; }
+body { margin:0; overflow:hidden; background:black; font-family: monospace; }
+
+/* HUD */
+#hud { position:absolute; width:100%; height:100%; color:#00f2ff; pointer-events:none; }
+
+#topBar {
+    position:absolute; top:20px; left:50%;
+    transform:translateX(-50%);
+    display:flex; gap:40px; font-size:14px;
+}
+
+#bottomBar {
+    position:absolute; bottom:20px; left:50%;
+    transform:translateX(-50%);
+    display:flex; gap:60px;
+}
+
+#centerReticle {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    font-size:22px;
+}
 </style>
 </head>
+
 <body>
 
-<div id="crosshair">+</div>
-<div id="radar"></div>
-<div id="planetOverlay"></div>
-
-<div id="ui">
-    <div class="panel">
-        <h1 class="text-cyan-400 font-bold mb-2">FLUG-MODUS</h1>
-        🚀 <b>WASD / SHIFT</b>: Fliegen & Boost<br>
-        🪐 <b>E</b>: Landen (wenn nah)<br>
-        <h1 class="text-yellow-400 font-bold mt-4 mb-2">PLANETEN-MODUS</h1>
-        🏃 <b>WASD</b>: Laufen<br>
-        🌌 <b>Q</b>: Zurück zum Schiff / Starten<br>
-        🎥 <b>C</b>: Kamera-Ansicht
+<div id="hud">
+    <div id="topBar">
+        <span id="target">TARGET: NONE</span>
+        <span id="distance">DIST: 0 km</span>
     </div>
-    <div id="info" class="panel mt-2 text-cyan-300 font-mono text-sm tracking-widest">SYSTEM INITIALIZED...</div>
+
+    <div id="centerReticle">⦿</div>
+
+    <div id="bottomBar">
+        <div>SPEED: <span id="speed">0</span> km/s</div>
+        <div>MODE: <span id="mode">CRUISE</span></div>
+    </div>
 </div>
 
 <script>
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000000, 0.00002);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 50000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 50000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.toneMapping = THREE.ReinhardToneMapping;
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const loader = new THREE.TextureLoader();
 
 /* LIGHT */
-const sunLight = new THREE.PointLight(0xffffff, 2.5, 0);
-sunLight.position.set(0,0,0);
-scene.add(sunLight);
-scene.add(new THREE.AmbientLight(0x202020));
+scene.add(new THREE.PointLight(0xffffff,2));
 
-/* ROCKET */
-const rocketGroup = new THREE.Group();
-scene.add(rocketGroup);
-const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 3, 16), new THREE.MeshStandardMaterial({color: 0xeeeeee, metalness:0.8, roughness:0.2}));
-body.rotation.x = Math.PI/2; rocketGroup.add(body);
-const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5,1,16), body.material); nose.position.z=-2; nose.rotation.x=-Math.PI/2; rocketGroup.add(nose);
-const wing = new THREE.Mesh(new THREE.BoxGeometry(2,0.1,0.8), new THREE.MeshStandardMaterial({color:0xff0000})); wing.position.z=0.5; rocketGroup.add(wing);
-const glass = new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8,0,Math.PI*2,0,0.5), new THREE.MeshPhongMaterial({color:0x003366, shininess:100})); glass.position.set(0,0.35,-1.2); rocketGroup.add(glass);
-const engineGlow = new THREE.Mesh(new THREE.SphereGeometry(0.4,16,16), new THREE.MeshBasicMaterial({color:0x00ffff, transparent:true, opacity:0.7})); engineGlow.position.z=1.5; rocketGroup.add(engineGlow);
+/* SHIP */
+const ship = new THREE.Group();
+scene.add(ship);
 
-/* ENVIRONMENT */
+const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5,0.6,3,16),
+    new THREE.MeshStandardMaterial({color:0xdddddd, metalness:1})
+);
+body.rotation.x = Math.PI/2;
+ship.add(body);
+
+const engineGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4,16,16),
+    new THREE.MeshBasicMaterial({color:0x00ffff})
+);
+engineGlow.position.z = 1.5;
+ship.add(engineGlow);
+
+/* PLANETS */
 const planets = [];
-function createPlanet(name,size,x,z,texture,desc){
-    const geo = new THREE.SphereGeometry(size,64,64);
-    const mat = new THREE.MeshStandardMaterial({map:loader.load(texture), roughness:0.8});
-    const p = new THREE.Mesh(geo, mat);
+function createPlanet(name,size,x,z){
+    const p = new THREE.Mesh(
+        new THREE.SphereGeometry(size,32,32),
+        new THREE.MeshStandardMaterial({color:Math.random()*0xffffff})
+    );
     p.position.set(x,0,z);
-    p.userData = {name,size,desc};
+    p.userData = {name,size};
     scene.add(p);
     planets.push(p);
 }
-createPlanet("Sonne",40,0,0,"https://threejs.org/examples/textures/planets/sun.jpg","Der zentrale Stern des Systems");
-createPlanet("Frost-Riese",12,400,300,"https://threejs.org/examples/textures/planets/jupiter.jpg","Ein riesiger Gasplanet");
-createPlanet("Wüstenwelt",8,-500,-200,"https://threejs.org/examples/textures/planets/mars_1024.jpg","Trockene Wüstenlandschaft");
-createPlanet("Terra",10,800,-600,"https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg","Lebensfreundlicher Planet");
+createPlanet("Terra",10,800,-600);
+createPlanet("Mars",8,-500,-200);
 
-/* STARFIELD + NEBULA */
+/* ASTEROIDS */
+const asteroids = [];
+for(let i=0;i<200;i++){
+    const a = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(Math.random()*2),
+        new THREE.MeshStandardMaterial({color:0x888888})
+    );
+    a.position.set(
+        Math.random()*2000-1000,
+        Math.random()*200-100,
+        Math.random()*2000-1000
+    );
+    scene.add(a);
+    asteroids.push(a);
+}
+
+/* STATIONS */
+const stations = [];
+for(let i=0;i<5;i++){
+    const s = new THREE.Mesh(
+        new THREE.BoxGeometry(5,2,5),
+        new THREE.MeshStandardMaterial({color:0x6666ff})
+    );
+    s.userData = {
+        angle: Math.random()*Math.PI*2,
+        radius: 400,
+        speed: 0.002
+    };
+    scene.add(s);
+    stations.push(s);
+}
+
+/* STARS */
 const starGeo = new THREE.BufferGeometry();
 const starV=[];
-for(let i=0;i<30000;i++) starV.push((Math.random()-0.5)*40000,(Math.random()-0.5)*40000,(Math.random()-0.5)*40000);
+for(let i=0;i<20000;i++){
+    starV.push(
+        (Math.random()-0.5)*40000,
+        (Math.random()-0.5)*40000,
+        (Math.random()-0.5)*40000
+    );
+}
 starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starV,3));
-const stars = new THREE.Points(starGeo,new THREE.PointsMaterial({color:0xffffff,size:2}));
-scene.add(stars);
+scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({size:1})));
 
-/* GAME STATE */
-let keys = {}, velocity = new THREE.Vector3(), landed=false, cockpit=false, playerHeight=1.8, walkSpeed=0.2;
-const radar = document.getElementById("radar");
-const overlay = document.getElementById("planetOverlay");
+/* CONTROLS */
+let keys={}, velocity=new THREE.Vector3();
+let speed=0, warp=false;
 
-function updateRadar(){
-    radar.innerHTML = "";
-    planets.forEach(p=>{
-        const dx = p.position.x - rocketGroup.position.x;
-        const dz = p.position.z - rocketGroup.position.z;
-        const dist = Math.sqrt(dx*dx+dz*dz)/500;
-        const dot = document.createElement("div");
-        dot.style.position="absolute";
-        dot.style.width="6px"; dot.style.height="6px"; dot.style.background="yellow";
-        dot.style.borderRadius="50%";
-        dot.style.left=75 + dx*dist + "px";
-        dot.style.top=75 + dz*dist + "px";
-        radar.appendChild(dot);
-    });
-}
-
-window.addEventListener("keydown", e => keys[e.key.toLowerCase()]=true);
-window.addEventListener("keyup", e => keys[e.key.toLowerCase()]=false);
-
-/* UPDATE PHYSICS */
-function updateSpacePhysics(){
-    if(landed) return;
-    let acc = keys["shift"]?0.08:0.02;
-    const dirF = new THREE.Vector3(0,0,-1).applyQuaternion(rocketGroup.quaternion);
-    if(keys["w"]){ velocity.add(dirF.clone().multiplyScalar(acc)); engineGlow.scale.setScalar(2+Math.random()); } 
-    else engineGlow.scale.setScalar(1);
-    if(keys["s"]){ velocity.add(dirF.clone().multiplyScalar(-acc*0.5)); }
-    if(keys["a"]) rocketGroup.rotateY(0.03);
-    if(keys["d"]) rocketGroup.rotateY(-0.03);
-    rocketGroup.position.add(velocity);
-    velocity.multiplyScalar(0.99);
-}
-
-/* WALKING */
-function updateWalking(){
-    if(!landed) return;
-    const dir=new THREE.Vector3(); camera.getWorldDirection(dir); dir.y=0; dir.normalize();
-    const side=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
-    if(keys["w"]) camera.position.add(dir.clone().multiplyScalar(walkSpeed));
-    if(keys["s"]) camera.position.sub(dir.clone().multiplyScalar(walkSpeed));
-    if(keys["a"]) camera.position.add(side.clone().multiplyScalar(walkSpeed));
-    if(keys["d"]) camera.position.sub(side.clone().multiplyScalar(walkSpeed));
-    if(keys["arrowleft"]) camera.rotation.y+=0.03;
-    if(keys["arrowright"]) camera.rotation.y-=0.03;
-}
-
-/* LANDING / TAKEOFF */
-window.addEventListener("keydown",e=>{
-    if(e.key==="e" && !landed){
-        planets.forEach(p=>{
-            if(rocketGroup.position.distanceTo(p.position)<p.userData.size+15){
-                landed=true;
-                overlay.style.display="block";
-                overlay.innerHTML = `<b>${p.userData.name}</b><br>${p.userData.desc}<br>Größe: ${p.userData.size}`;
-                // sanfte Landung
-                let targetY = p.userData.size + playerHeight;
-                let landInterval = setInterval(()=>{
-                    rocketGroup.position.y += (targetY - rocketGroup.position.y)*0.1;
-                    if(Math.abs(rocketGroup.position.y-targetY)<0.1) clearInterval(landInterval);
-                },16);
-                camera.position.set(p.position.x,targetY,p.position.z+5);
-                document.getElementById("info").innerText="BETRETE OBERFLÄCHE: "+p.userData.name;
-                document.getElementById("crosshair").style.display="block";
-            }
-        });
-    }
-    if(e.key==="q" && landed){
-        landed=false;
-        rocketGroup.position.copy(camera.position);
-        overlay.style.display="none";
-        document.getElementById("info").innerText="SYSTEMS ONLINE - SPACE MODE";
-        document.getElementById("crosshair").style.display="none";
-    }
-    if(e.key==="c") cockpit=!cockpit;
+addEventListener("keydown",e=>{
+    keys[e.key.toLowerCase()]=true;
+    if(e.key==="f") warp=!warp; // WARP TOGGLE
 });
+addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+
+/* TARGET */
+function getClosestPlanet(){
+    let c=null, d=Infinity;
+    planets.forEach(p=>{
+        let dist=ship.position.distanceTo(p.position);
+        if(dist<d){ d=dist; c=p; }
+    });
+    return c;
+}
+
+/* SCAN */
+function scan(){
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0,0), camera);
+    const hit = ray.intersectObjects(planets);
+    if(hit.length>0){
+        document.getElementById("mode").innerText =
+        "SCAN: " + hit[0].object.userData.name;
+    }
+}
+
+/* UPDATE */
+function update(){
+
+    let acc = warp ? 0.5 : (keys["shift"]?0.08:0.02);
+
+    const dir = new THREE.Vector3(0,0,-1).applyQuaternion(ship.quaternion);
+
+    if(keys["w"]) velocity.add(dir.clone().multiplyScalar(acc));
+    if(keys["s"]) velocity.add(dir.clone().multiplyScalar(-acc));
+
+    if(keys["a"]) ship.rotation.y+=0.03;
+    if(keys["d"]) ship.rotation.y-=0.03;
+
+    ship.position.add(velocity);
+    velocity.multiplyScalar(0.99);
+
+    speed = velocity.length()*10;
+
+    document.getElementById("speed").innerText = Math.floor(speed);
+    document.getElementById("mode").innerText = warp ? "WARP" : "CRUISE";
+
+    engineGlow.scale.setScalar(1+velocity.length()*0.5);
+}
 
 /* ANIMATE */
 function animate(){
     requestAnimationFrame(animate);
-    if(!landed){
-        updateSpacePhysics();
-        if(!cockpit){
-            const ideal=new THREE.Vector3(0,3,12).applyQuaternion(rocketGroup.quaternion).add(rocketGroup.position);
-            camera.position.lerp(ideal,0.1); camera.lookAt(rocketGroup.position);
-        } else {
-            camera.position.copy(rocketGroup.position);
-            camera.quaternion.copy(rocketGroup.quaternion);
-        }
-    } else updateWalking();
-    planets.forEach(p=>p.rotation.y+=0.001);
-    updateRadar();
+
+    update();
+    scan();
+
+    /* camera cockpit */
+    camera.position.copy(ship.position);
+    camera.position.add(new THREE.Vector3(0,1,0));
+    camera.quaternion.copy(ship.quaternion);
+
+    /* stations move */
+    stations.forEach(s=>{
+        s.userData.angle += s.userData.speed;
+        s.position.x = Math.cos(s.userData.angle)*s.userData.radius;
+        s.position.z = Math.sin(s.userData.angle)*s.userData.radius;
+    });
+
+    /* target UI */
+    const t = getClosestPlanet();
+    if(t){
+        document.getElementById("target").innerText = "TARGET: "+t.userData.name;
+        document.getElementById("distance").innerText =
+        "DIST: "+Math.floor(ship.position.distanceTo(t.position));
+    }
+
     renderer.render(scene,camera);
 }
 animate();
 
 /* RESIZE */
-window.addEventListener("resize",()=>{
-    camera.aspect=window.innerWidth/window.innerHeight;
+addEventListener("resize",()=>{
+    camera.aspect=innerWidth/innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth,window.innerHeight);
+    renderer.setSize(innerWidth,innerHeight);
 });
 </script>
+
 </body>
 </html>
